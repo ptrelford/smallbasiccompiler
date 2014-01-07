@@ -130,14 +130,19 @@ let emitInstructions
         il.EmitCall(OpCodes.Call, mi, null)
     let emitInstruction (il:ILGenerator) = function       
         | Assign(set) -> emitSet il set
-        | SetAt(Location(name,[index]),e) ->
+        | SetAt(Location(name,indices),e) ->
             emitExpression il e
-            il.Emit(OpCodes.Ldsfld, fieldLookup name)
-            emitExpression il index
-            let mi = typeof<Primitive>.GetMethod("SetArrayValue")
-            il.EmitCall(OpCodes.Call, mi, null)
+            let lastIndex = indices.Length - 1
+            for lastIndex = indices.Length - 1 downto 0 do
+                il.Emit(OpCodes.Ldsfld, fieldLookup name)
+                for index = 0 to lastIndex - 1 do
+                    emitExpression il indices.[index]
+                    let mi = typeof<Primitive>.GetMethod("GetArrayValue")
+                    il.EmitCall(OpCodes.Call, mi, null)
+                emitExpression il indices.[lastIndex]
+                let mi = typeof<Primitive>.GetMethod("SetArrayValue")
+                il.EmitCall(OpCodes.Call, mi, null)
             il.Emit(OpCodes.Stsfld, fieldLookup name)
-        | SetAt(_,_) -> raise (NotImplementedException())
         | Action(invoke) -> emitInvoke il invoke
         | PropertySet(typeName,propertyName,e) ->
             emitExpression il e
@@ -232,7 +237,7 @@ let compileTo name (program:instruction[]) =
     /// Main method representing main routine
     let mainBuilder =
         typeBuilder.DefineMethod(
-            "Main", 
+            "_Main", 
             MethodAttributes.Static ||| MethodAttributes.Public,
             typeof<Void>,
             [|typeof<string[]>|])
