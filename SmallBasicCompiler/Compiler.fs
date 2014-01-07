@@ -42,6 +42,7 @@ let emitInstructions
         (mainIL:ILGenerator, methods:IDictionary<identifier,MethodBuilder>) 
         (fieldLookup:string -> FieldBuilder) 
         (instructions:instruction[]) =
+    /// IL generator for current method
     let methodIL = ref mainIL
     let loopStack = Stack<Label * Label>()
     let ifStack = Stack<Label>()
@@ -224,19 +225,27 @@ let compileTo name (program:instruction[]) =
     /// Builder for type
     let typeBuilder =
         moduleBuilder.DefineType("Program", TypeAttributes.Public)
+    /// Fields representing program's variables
     let fields = generateFields typeBuilder program
+    /// Methods representing program's subroutine
     let methods = generateMethods typeBuilder program
+    /// Main method representing main routine
     let mainBuilder =
         typeBuilder.DefineMethod(
             "Main", 
             MethodAttributes.Static ||| MethodAttributes.Public,
             typeof<Void>,
             [|typeof<string[]>|])
+    // Set name of main method arguments
     let args = mainBuilder.DefineParameter(1, ParameterAttributes.None, "args")
-    let il = mainBuilder.GetILGenerator() 
+    // IL generator for main method
+    let il = mainBuilder.GetILGenerator()
+    /// Returns field for specified variable
     let fieldLookup name = fields.[name]
+    // Emit program instructions
     emitInstructions (il,methods) fieldLookup program
     il.Emit(OpCodes.Ret)
+    // Set main method as entry point
     assemblyBuilder.SetEntryPoint(mainBuilder)
     typeBuilder.CreateType() |> ignore
     assemblyBuilder.Save(name+".exe")
