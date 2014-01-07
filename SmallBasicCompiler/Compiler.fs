@@ -78,7 +78,12 @@ let emitInstructions
     let rec emitExpression (il:ILGenerator) = function
         | Literal(x) -> emitLiteral il x
         | Var(name) -> il.Emit(OpCodes.Ldsfld, fieldLookup name)
-        | GetAt(_) -> raise (NotImplementedException())
+        | GetAt(Location(name,indices)) ->
+            il.Emit(OpCodes.Ldsfld, fieldLookup name)
+            for index in indices do
+                emitExpression il index
+                let mi = typeof<Primitive>.GetMethod("GetArrayValue")
+                il.EmitCall(OpCodes.Call, mi, null)
         | Func(invoke) -> emitInvoke il invoke
         | Neg(e) -> 
             emitExpression il e; 
@@ -124,11 +129,18 @@ let emitInstructions
         il.EmitCall(OpCodes.Call, mi, null)
     let emitInstruction (il:ILGenerator) = function       
         | Assign(set) -> emitSet il set
-        | SetAt(location,e) -> raise (NotImplementedException())
+        | SetAt(Location(name,[index]),e) ->
+            emitExpression il e
+            il.Emit(OpCodes.Ldsfld, fieldLookup name)
+            emitExpression il index
+            let mi = typeof<Primitive>.GetMethod("SetArrayValue")
+            il.EmitCall(OpCodes.Call, mi, null)
+            il.Emit(OpCodes.Stsfld, fieldLookup name)
+        | SetAt(_,_) -> raise (NotImplementedException())
         | Action(invoke) -> emitInvoke il invoke
         | PropertySet(typeName,propertyName,e) ->
             emitExpression il e
-            let typeName = getLibraryTypeName typeName 
+            let typeName = getLibraryTypeName typeName
             let pi = Type.GetType(typeName).GetProperty(propertyName)
             il.EmitCall(OpCodes.Call, pi.GetSetMethod(), null)
         | If(condition) ->
