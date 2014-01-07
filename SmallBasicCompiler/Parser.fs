@@ -128,7 +128,7 @@ let pcomment = pchar '\'' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n
 let peol = pcomment <|> (pchar '\n')
 let pinstruction = ws >>. pinstruct .>> peol |>> (fun i -> Instruction i)
 let pblank = ws >>. peol |>> (fun _ -> Blank)
-let plines = many (pinstruction <|> pblank) .>> eof
+let plines = many (attempt pinstruction <|> attempt pblank) .>> eof
 let parse (program:string) =    
     match run plines program with
     | Success(result, _, _)   -> 
