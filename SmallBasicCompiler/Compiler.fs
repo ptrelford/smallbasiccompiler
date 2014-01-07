@@ -45,7 +45,7 @@ let emitInstructions
     /// IL generator for current method
     let methodIL = ref mainIL
     let loopStack = Stack<Label * Label>()
-    let ifStack = Stack<Label>()
+    let ifStack = Stack<Label * Label>()
     let labels = Dictionary<string, Label>()
     let obtainLabel (il:ILGenerator) name =
         match labels.TryGetValue(name) with
@@ -150,22 +150,29 @@ let emitInstructions
             let pi = Type.GetType(typeName).GetProperty(propertyName)
             il.EmitCall(OpCodes.Call, pi.GetSetMethod(), null)
         | If(condition) ->
-            let label = il.DefineLabel()
-            ifStack.Push(label)
+            let elseLabel = il.DefineLabel()
+            let endLabel = il.DefineLabel()
+            ifStack.Push(elseLabel, endLabel)
             emitExpression il condition
             emitConvertToBool il
-            il.Emit(OpCodes.Brfalse, label)
+            il.Emit(OpCodes.Brfalse, elseLabel)
         | ElseIf(condition) ->
-            raise (NotImplementedException())
+            let elseLabel, endLabel = ifStack.Pop()
+            il.Emit(OpCodes.Br, endLabel)
+            il.MarkLabel(elseLabel)
+            let elseLabel = il.DefineLabel()
+            ifStack.Push(elseLabel, endLabel)
+            emitExpression il condition
+            emitConvertToBool il
+            il.Emit(OpCodes.Brfalse, elseLabel)
         | Else ->
-            let newLabel = il.DefineLabel()
-            il.Emit(OpCodes.Br, newLabel)
-            let label = ifStack.Pop()
-            il.MarkLabel(label)           
-            ifStack.Push(newLabel)
+            let elseLabel, endLabel = ifStack.Pop()
+            il.Emit(OpCodes.Br, endLabel)
+            il.MarkLabel(elseLabel) 
+            ifStack.Push(endLabel,endLabel)
         | EndIf ->
-            let label = ifStack.Pop()
-            il.MarkLabel(label)          
+            let _, endLabel = ifStack.Pop()
+            il.MarkLabel(endLabel)
         | For((Set(name,x)) as set, until, step) ->
             emitSet il set
             let beginFor = il.DefineLabel()
