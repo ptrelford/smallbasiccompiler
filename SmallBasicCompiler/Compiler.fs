@@ -43,9 +43,9 @@ let emitInstructions
         (fieldLookup:string -> FieldBuilder) 
         (instructions:instruction[]) =
     let methodIL = ref mainIL
-    let labels = Dictionary<string, Label>()
     let loopStack = Stack<Label * Label>()
     let ifStack = Stack<Label>()
+    let labels = Dictionary<string, Label>()
     let obtainLabel (il:ILGenerator) name =
         match labels.TryGetValue(name) with
         | true, label -> label
@@ -53,31 +53,33 @@ let emitInstructions
             let label = il.DefineLabel()
             labels.Add(name, label)
             label
+    let getLibraryTypeName name =
+        sprintf "Microsoft.SmallBasic.Library.%s, SmallBasicLibrary" name
     let emitPrimitive (il:ILGenerator) t =
         let ci = typeof<Primitive>.GetConstructor([|t|])
         il.Emit(OpCodes.Newobj, ci) 
     let emitLiteral (il:ILGenerator) = function
         | Bool(true) -> 
-            il.Emit(OpCodes.Ldc_I4_1);
+            il.Emit(OpCodes.Ldc_I4_1)
             emitPrimitive il typeof<bool>          
         | Bool(false) -> 
-            il.Emit(OpCodes.Ldc_I4_0); 
+            il.Emit(OpCodes.Ldc_I4_0)
             emitPrimitive il typeof<bool>
         | Int(n) -> 
-            il.Emit(OpCodes.Ldc_I4, n); 
+            il.Emit(OpCodes.Ldc_I4, n) 
             emitPrimitive il typeof<int>
         | Double(n) -> 
-            il.Emit(OpCodes.Ldc_R8, n); 
+            il.Emit(OpCodes.Ldc_R8, n) 
             emitPrimitive il typeof<double>
         | String(s) -> 
             il.Emit(OpCodes.Ldstr, s); 
             emitPrimitive il typeof<string>
-        | Array(_) -> raise (NotImplementedException())    
+        | Array(_) -> raise (NotImplementedException())
     let rec emitExpression (il:ILGenerator) = function
         | Literal(x) -> emitLiteral il x
         | Var(name) -> il.Emit(OpCodes.Ldsfld, fieldLookup name)
         | GetAt(_) -> raise (NotImplementedException())
-        | Func(_) -> raise (NotImplementedException())
+        | Func(invoke) -> emitInvoke il invoke
         | Neg(e) -> 
             emitExpression il e; 
             let mi = typeof<Primitive>.GetMethod("op_UnaryNegation")
@@ -102,15 +104,17 @@ let emitInstructions
         emitExpression il rhs;
         let mi = typeof<Primitive>.GetMethod(op)
         il.EmitCall(OpCodes.Call, mi, null)
-    let emitInvoke (il:ILGenerator) = function
+    and emitInvoke (il:ILGenerator) = function
         | Method(typeName, methodName, args) ->
             for arg in args do emitExpression il arg
             let types = [|for arg in args -> typeof<Primitive>|]
-            let typeName = 
-                sprintf "Microsoft.SmallBasic.Library.%s, SmallBasicLibrary" typeName
+            let typeName = getLibraryTypeName typeName
             let mi = Type.GetType(typeName).GetMethod(methodName, types)
             il.EmitCall(OpCodes.Call, mi, null)
-        | PropertyGet(typeName, propertyName) -> raise (NotImplementedException())
+        | PropertyGet(typeName, propertyName) ->
+            let typeName = getLibraryTypeName typeName 
+            let pi = Type.GetType(typeName).GetProperty(propertyName)
+            il.EmitCall(OpCodes.Call, pi.GetGetMethod(), null)
     let emitSet (il:ILGenerator) = function
         | Set(name,e) ->           
             let ty = emitExpression il e     
@@ -122,7 +126,11 @@ let emitInstructions
         | Assign(set) -> emitSet il set
         | SetAt(location,e) -> raise (NotImplementedException())
         | Action(invoke) -> emitInvoke il invoke
-        | PropertySet(typeName,propertyName,e) -> raise (NotImplementedException())
+        | PropertySet(typeName,propertyName,e) ->
+            emitExpression il e
+            let typeName = getLibraryTypeName typeName 
+            let pi = Type.GetType(typeName).GetProperty(propertyName)
+            il.EmitCall(OpCodes.Call, pi.GetSetMethod(), null)
         | If(condition) ->
             let label = il.DefineLabel()
             ifStack.Push(label)
