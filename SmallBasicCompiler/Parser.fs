@@ -69,13 +69,16 @@ oppl.AddOperator(InfixOperator("Or", ws, 1, Assoc.Left, fun x y -> Logical(x,Or,
 
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
 let ptuple = between (str_ws "(") (str_ws ")") (sepBy parithmetic (str_ws ","))
-pinvokeimpl := 
+let pmemberinvoke =
     pipe2 pmember (opt ptuple)
         (fun (tn,mn) args -> 
         match args with
         | Some args -> Method(tn, mn, args |> List.toArray)
         | None -> PropertyGet(tn,mn)
         )
+let pcall = pidentifier_ws .>> str_ws "()" |>> (fun name -> Call(name))
+
+pinvokeimpl := attempt pcall <|> attempt pmemberinvoke 
 
 let paction = pinvoke |>> (fun x -> Action(x))
 let pset = pipe3 pidentifier_ws (str_ws "=") parithmetic (fun id _ e -> Set(id, e))
@@ -110,6 +113,9 @@ let pgosub = pidentifier_ws .>> str_ws "()" |>> (fun routine -> GoSub(routine))
 let plabel = pidentifier_ws .>> str_ws ":" |>> (fun label -> Label(label))
 let pgoto = str_ws1 "Goto" >>. pidentifier |>> (fun label -> Goto(label))
 
+let pfunction = str_ws1 "Function" >>. pidentifier |>> (fun name -> Function(name))
+let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
+
 let pinstruct = 
     [
         pfor;pendfor
@@ -119,6 +125,7 @@ let pinstruct =
         ppropertyset; passign; psetat
         paction
         plabel; pgoto
+        pfunction; pendfunction
     ]
     |> List.map attempt
     |> choice

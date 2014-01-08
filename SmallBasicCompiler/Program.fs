@@ -1,20 +1,19 @@
 ﻿let source = """
 ' Sets Result to Modulus
-Sub Modulus
+Function Modulus
   Result = Dividend
   While Result >= Divisor
     Result = Result - Divisor
   EndWhile
-EndSub
+  Modulus = Result
+EndFunction
 
 For A = 1 To 100 ' Print from 1 to 100
   Dividend = A
   Divisor = 3
-  Modulus()
-  Mod3 = Result ' A % 3
+  Mod3 = Modulus() ' A % 3
   Divisor = 5
-  Modulus()
-  Mod5 = Result ' A % 5
+  Mod5 = Modulus() ' A % 5
   If Mod3 = 0 And Mod5 = 0 Then
     TextWindow.WriteLine("FizzBuzz")  
   Else

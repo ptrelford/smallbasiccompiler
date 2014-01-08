@@ -32,6 +32,7 @@ type expr =
 and location =
     | Location of identifier * expr list
 and invoke =
+    | Call of string
     | Method of string * string * expr[]
     | PropertyGet of string * string
 type assign =
@@ -55,4 +56,6 @@ type instruction =
     | GoSub of identifier
     | Label of label
     | Goto of label
+    | Function of identifier
+    | EndFunction
 // [/snippet]

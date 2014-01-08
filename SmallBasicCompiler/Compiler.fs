@@ -23,18 +23,19 @@ let generateFields (typeBuilder:TypeBuilder) (instructions:instruction[]) =
 
 /// Generates methods for named subroutines defined in instructions
 let generateMethods (typeBuilder:TypeBuilder) (instructions:instruction[]) =
-    let generateMethod name = 
+    let generateMethod name returnType = 
         typeBuilder.DefineMethod(
             name, 
             MethodAttributes.Static ||| MethodAttributes.Public,
-            typeof<Void>,
+            returnType,
             [||])
     [for instruction in instructions do
         match instruction with
-        | Sub(name) -> yield name
+        | Sub(name) -> yield name, typeof<Void>
+        | Function(name) -> yield name, typeof<Primitive>
         | _ -> ()
     ]
-    |> Seq.map (fun name -> name, generateMethod name)
+    |> Seq.map (fun (name,ty) -> name, generateMethod name ty)
     |> dict
 
 /// Emits IL for the specified instructions
@@ -44,6 +45,8 @@ let emitInstructions
         (instructions:instruction[]) =
     /// IL generator for current method
     let methodIL = ref mainIL
+    /// Name of current method
+    let methodName = ref "Main"
     let loopStack = Stack<Label * Label>()
     let ifStack = Stack<Label * Label>()
     let labels = Dictionary<string, Label>()
@@ -121,6 +124,9 @@ let emitInstructions
             let typeName = getLibraryTypeName typeName 
             let pi = Type.GetType(typeName).GetProperty(propertyName)
             il.EmitCall(OpCodes.Call, pi.GetGetMethod(), null)
+        | Call(name) ->
+            let mi = methods.[name]
+            il.EmitCall(OpCodes.Call, mi, [||]) 
     let emitSet (il:ILGenerator) = function
         | Set(name,e) ->           
             let ty = emitExpression il e     
@@ -211,11 +217,18 @@ let emitInstructions
         | Label(name) ->
             let label = obtainLabel il name
             il.MarkLabel(label)
-        | Sub(name) ->
+        | Sub(name) | Function(name) ->
             let builder = methods.[name]
+            methodName := name
             methodIL := builder.GetILGenerator()
         | EndSub ->
             il.Emit(OpCodes.Ret)
+            methodName := "Main"
+            methodIL := mainIL
+        | EndFunction ->
+            il.Emit(OpCodes.Ldsfld, fieldLookup !methodName)
+            il.Emit(OpCodes.Ret)
+            methodName := "Main"
             methodIL := mainIL
         | GoSub(name) ->
             let mi = methods.[name]
