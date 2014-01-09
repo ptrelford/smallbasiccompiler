@@ -96,18 +96,18 @@ let pelseif = str_ws1 "ElseIf" >>. pterm .>> str_ws "Then" |>> (fun e -> ElseIf(
 let pelse = str_ws "Else" |>> (fun _ -> Else)
 let pendif = str_ws "EndIf" |>> (fun _ -> EndIf)
 
-let psub = str_ws1 "Sub" >>. pidentifier |>> (fun name -> Sub(name))
+let pparams = between (str_ws "(") (str_ws ")") (sepBy pidentifier_ws (str_ws ","))
+let pmethod = pidentifier_ws .>>. opt pparams
+              |>> (fun (name,ps) -> name, match ps with Some ps -> ps | None -> [])
+
+let psub = str_ws1 "Sub" >>. pmethod |>> (fun (name,ps) -> Sub(name,ps))
 let pendsub = str_ws "EndSub" |>> (fun _ -> EndSub)
 let pgosub = pidentifier_ws .>> str_ws "()" |>> (fun routine -> GoSub(routine))
 
 let plabel = pidentifier_ws .>> str_ws ":" |>> (fun label -> Label(label))
 let pgoto = str_ws1 "Goto" >>. pidentifier |>> (fun label -> Goto(label))
 
-let pparams = between (str_ws "(") (str_ws ")") (sepBy pidentifier_ws (str_ws ","))
-let pfunction = str_ws1 "Function" >>. pidentifier .>>. opt pparams
-                |>> function 
-                    | name,Some ps -> Function(name, ps)
-                    | (name,None) -> Function(name,[])
+let pfunction = str_ws1 "Function" >>. pmethod |>> (fun (name,ps) -> Function(name,ps))
 let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 
 let pinstruct = 

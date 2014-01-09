@@ -51,7 +51,7 @@ type instruction =
     | EndIf
     | While of expr
     | EndWhile
-    | Sub of identifier
+    | Sub of identifier * string list
     | EndSub
     | GoSub of identifier
     | Label of label

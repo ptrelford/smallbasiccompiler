@@ -35,7 +35,7 @@ let generateMethods (typeBuilder:TypeBuilder) (instructions:instruction[]) =
         mi
     [for instruction in instructions do
         match instruction with
-        | Sub(name) -> yield name, typeof<Void>, []
+        | Sub(name, ps) -> yield name, typeof<Void>, ps
         | Function(name, ps) -> yield name, typeof<Primitive>, ps
         | _ -> ()
     ]
@@ -248,7 +248,7 @@ let emitInstructions
         | Label(name) ->
             let label = obtainLabel il name
             il.MarkLabel(label)
-        | Sub(name) | Function(name,_) ->
+        | Sub(name,_) | Function(name,_) ->
             let builder, _ = methods.[name]
             methodName := name
             methodIL := builder.GetILGenerator()
