@@ -22,7 +22,7 @@ type value =
 /// Small Basic expression
 type expr =
     | Literal of value
-    | Var of identifier
+    | Identifier of identifier
     | GetAt of location
     | Func of invoke
     | Neg of expr
@@ -32,8 +32,8 @@ type expr =
 and location =
     | Location of identifier * expr list
 and invoke =
-    | Call of string
-    | Method of string * string * expr[]
+    | Call of string * expr list // Language extension
+    | Method of string * string * expr list
     | PropertyGet of string * string
 type assign =
     | Set of identifier * expr
@@ -56,6 +56,7 @@ type instruction =
     | GoSub of identifier
     | Label of label
     | Goto of label
-    | Function of identifier
+    // Language extensions
+    | Function of identifier * string list
     | EndFunction
 // [/snippet]
