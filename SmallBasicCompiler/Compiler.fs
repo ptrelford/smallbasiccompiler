@@ -261,9 +261,9 @@ let emitInstructions
             il.Emit(OpCodes.Ret)
             methodName := "Main"
             methodIL := mainIL
-        | GoSub(name) ->
-            let mi, _ = methods.[name]
-            il.EmitCall(OpCodes.Call, mi, [||])
+        | Select(e) -> raise (System.NotImplementedException())
+        | Case(e) -> raise (System.NotImplementedException())
+        | EndSelect -> raise (System.NotImplementedException())
     // Iterate over instructions
     for instruction in instructions do 
         emitInstruction !methodIL instruction 

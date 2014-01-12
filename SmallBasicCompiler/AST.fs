@@ -53,10 +53,12 @@ type instruction =
     | EndWhile
     | Sub of identifier * string list
     | EndSub
-    | GoSub of identifier
     | Label of label
     | Goto of label
     // Language extensions
     | Function of identifier * string list
     | EndFunction
+    | Select of expr
+    | Case of value
+    | EndSelect
 // [/snippet]

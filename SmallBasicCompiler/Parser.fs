@@ -3,20 +3,22 @@
 // [snippet:Parser]
 open FParsec
 
-let pnumliteral: Parser<expr, unit> =
+let pnumvalue: Parser<value, unit> =
     let numberFormat = NumberLiteralOptions.AllowFraction
     numberLiteral numberFormat "number"
     |>> fun nl ->
-            if nl.IsInteger then Literal(Int (int nl.String))
-            else Literal(Double (float nl.String))
+            if nl.IsInteger then Int (int nl.String)
+            else Double(float nl.String)
 
 let ws = skipManySatisfy (fun c -> c = ' ' || c = '\t' || c='\r') // spaces
 let str_ws s = pstring s .>> ws
 let str_ws1 s = pstring s .>> spaces1
 
-let pstringliteral = 
+let pstringvalue = 
     between (pstring "\"") (pstring "\"") (manySatisfy (fun x -> x <> '"')) 
-    |>> (fun s -> Literal(String(s)))
+    |>> (fun s -> String(s))
+
+let pvalue = pnumvalue <|> pstringvalue
 
 let pidentifier =
     let isIdentifierFirstChar c = isLetter c || c = '_'
@@ -30,9 +32,9 @@ let pfunc = pinvoke |>> (fun x -> Func(x))
 let plocation, plocationimpl = createParserForwardedToRef ()
 let pgetat = plocation |>> (fun loc -> GetAt(loc))
 
-let pvalue = 
+let patom = 
     choice [
-        pnumliteral; pstringliteral
+        pvalue |>> (fun x -> Literal(x))
         attempt pgetat;attempt pfunc
         attempt (pidentifier |>> (fun x -> Identifier(x)))
     ]
@@ -41,7 +43,7 @@ type Assoc = Associativity
 
 let opp = new OperatorPrecedenceParser<expr,unit,unit>()
 let pterm = opp.ExpressionParser
-let term = (pvalue .>> ws) <|> between (str_ws "(") (str_ws ")") pterm
+let term = (patom .>> ws) <|> between (str_ws "(") (str_ws ")") pterm
 opp.TermParser <- term
 opp.AddOperator(InfixOperator("And", ws, 1, Assoc.Left, fun x y -> Logical(x,And,y)))
 opp.AddOperator(InfixOperator("Or", ws, 1, Assoc.Left, fun x y -> Logical(x,Or,y)))
@@ -102,7 +104,6 @@ let pmethod = pidentifier_ws .>>. opt pparams
 
 let psub = str_ws1 "Sub" >>. pmethod |>> (fun (name,ps) -> Sub(name,ps))
 let pendsub = str_ws "EndSub" |>> (fun _ -> EndSub)
-let pgosub = pidentifier_ws .>> str_ws "()" |>> (fun routine -> GoSub(routine))
 
 let plabel = pidentifier_ws .>> str_ws ":" |>> (fun label -> Label(label))
 let pgoto = str_ws1 "Goto" >>. pidentifier |>> (fun label -> Goto(label))
@@ -110,16 +111,22 @@ let pgoto = str_ws1 "Goto" >>. pidentifier |>> (fun label -> Goto(label))
 let pfunction = str_ws1 "Function" >>. pmethod |>> (fun (name,ps) -> Function(name,ps))
 let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 
+let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pterm
+              |>> (fun e -> Select(e))
+let pcase = str_ws1 "Case" >>. str_ws1 "Case" >>. pvalue |>>  (fun x -> Case(x))
+let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
+
 let pinstruct = 
     [
         pfor;pendfor
         pwhile;pendwhile
         pif; pelseif; pelse; pendif
-        psub; pendsub; pgosub
+        pselect; pcase; pendselect
+        psub; pendsub
+        pfunction; pendfunction
         ppropertyset; passign; psetat
         paction
         plabel; pgoto
-        pfunction; pendfunction
     ]
     |> List.map attempt
     |> choice
