@@ -55,6 +55,7 @@ let emitInstructions
     let methodName = ref "Main"
     let loopStack = Stack<Label * Label>()
     let ifStack = Stack<Label * Label>()
+    let caseStack = Stack<Label>()
     let labels = Dictionary<string, Label>()
     let obtainLabel (il:ILGenerator) name =
         match labels.TryGetValue(name) with
@@ -120,7 +121,7 @@ let emitInstructions
         | Arithmetic(lhs,Add,rhs) -> emitOp il lhs rhs "op_Addition" 
         | Arithmetic(lhs,Subtract,rhs) -> emitOp il lhs rhs "op_Subtraction"
         | Arithmetic(lhs,Multiply,rhs) -> emitOp il lhs rhs "op_Multiply" 
-        | Arithmetic(lhs,Divide,rhs) -> emitOp il lhs rhs "op_Divide"
+        | Arithmetic(lhs,Divide,rhs) -> emitOp il lhs rhs "op_Division"
         | Comparison(lhs,Eq,rhs) -> emitOp il lhs rhs "op_Equality"
         | Comparison(lhs,Ne,rhs) -> emitOp il lhs rhs "op_Inequality"
         | Comparison(lhs,Gt,rhs) -> emitOp il lhs rhs "op_GreaterThan"
@@ -261,9 +262,26 @@ let emitInstructions
             il.Emit(OpCodes.Ret)
             methodName := "Main"
             methodIL := mainIL
-        | Select(e) -> raise (System.NotImplementedException())
-        | Case(e) -> raise (System.NotImplementedException())
-        | EndSelect -> raise (System.NotImplementedException())
+        | Select(e) ->
+            emitExpression il e
+            let caseLabel = il.DefineLabel()
+            let endLabel = il.DefineLabel()
+            caseStack.Push(caseLabel)
+        | Case(x) ->
+            let caseLabel = caseStack.Pop()
+            il.MarkLabel(caseLabel)
+            il.Emit(OpCodes.Dup)
+            emitLiteral il x
+            let mi = typeof<Primitive>.GetMethod("op_Equality")
+            il.EmitCall(OpCodes.Call, mi, null)
+            emitConvertToBool il
+            let caseLabel = il.DefineLabel()
+            caseStack.Push(caseLabel)
+            il.Emit(OpCodes.Brfalse, caseLabel)
+        | EndSelect ->
+            let caseLabel = caseStack.Pop()
+            il.MarkLabel(caseLabel)
+            il.Emit(OpCodes.Pop)
     // Iterate over instructions
     for instruction in instructions do 
         emitInstruction !methodIL instruction 

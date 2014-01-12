@@ -113,7 +113,7 @@ let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 
 let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pterm
               |>> (fun e -> Select(e))
-let pcase = str_ws1 "Case" >>. str_ws1 "Case" >>. pvalue |>>  (fun x -> Case(x))
+let pcase = str_ws1 "Case" >>. pvalue |>>  (fun x -> Case(x))
 let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
 
 let pinstruct = 
