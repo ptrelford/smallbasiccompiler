@@ -52,12 +52,9 @@ opp.AddOperator(InfixOperator("-", ws, 2, Assoc.Left, fun x y -> Arithmetic(x, S
 opp.AddOperator(InfixOperator("*", ws, 3, Assoc.Left, fun x y -> Arithmetic(x, Multiply, y)))
 opp.AddOperator(InfixOperator("/", ws, 3, Assoc.Left, fun x y -> Arithmetic(x, Divide, y)))
 opp.AddOperator(PrefixOperator("-", ws, 2, true, fun x -> Neg(x)))
-opp.AddOperator(InfixOperator("=", ws, 2, Assoc.Left, fun x y -> Comparison(x, Eq, y)))
-opp.AddOperator(InfixOperator("<>", ws, 2, Assoc.Left, fun x y -> Comparison(x, Ne, y)))
-opp.AddOperator(InfixOperator("<=", ws, 2, Assoc.Left, fun x y -> Comparison(x, Le, y)))
-opp.AddOperator(InfixOperator(">=", ws, 2, Assoc.Left, fun x y -> Comparison(x, Ge, y)))
-opp.AddOperator(InfixOperator("<", ws, 2, Assoc.Left, fun x y -> Comparison(x, Lt, y)))
-opp.AddOperator(InfixOperator(">", ws, 2, Assoc.Left, fun x y -> Comparison(x, Gt, y)))
+let comparisons = ["=",Eq; "<>",Ne; "<=",Le; ">=",Ge; "<",Lt; ">",Gt]
+for s,op in comparisons do
+    opp.AddOperator(InfixOperator(s, ws, 2, Assoc.Left, fun x y -> Comparison(x, op, y)))
 
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
 let ptuple = between (str_ws "(") (str_ws ")") (sepBy pterm (str_ws ","))
@@ -113,7 +110,14 @@ let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 
 let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pterm
               |>> (fun e -> Select(e))
-let pcase = str_ws1 "Case" >>. pvalue |>>  (fun x -> Case(x))
+
+let pcomparison = choice [ for s,op in comparisons -> str_ws1 s |>> fun _ -> op]
+let pis = str_ws1 "Is" >>. pcomparison .>>. pvalue |>> (fun (op,x) -> Is(op,x))
+let pisequal = pvalue |>> (fun x -> Is(Eq,x))
+let pcase = 
+    str_ws1 "Case" >>. 
+    sepBy (attempt pis <|> attempt pisequal) (str_ws ",")
+    |>> (fun xs -> Case(xs))
 let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
 
 let pinstruct = 

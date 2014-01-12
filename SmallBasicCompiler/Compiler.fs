@@ -55,7 +55,7 @@ let emitInstructions
     let methodName = ref "Main"
     let loopStack = Stack<Label * Label>()
     let ifStack = Stack<Label * Label>()
-    let caseStack = Stack<Label>()
+    let caseStack = Stack<(Label * Label) option>()
     let labels = Dictionary<string, Label>()
     let obtainLabel (il:ILGenerator) name =
         match labels.TryGetValue(name) with
@@ -122,14 +122,13 @@ let emitInstructions
         | Arithmetic(lhs,Subtract,rhs) -> emitOp il lhs rhs "op_Subtraction"
         | Arithmetic(lhs,Multiply,rhs) -> emitOp il lhs rhs "op_Multiply" 
         | Arithmetic(lhs,Divide,rhs) -> emitOp il lhs rhs "op_Division"
-        | Comparison(lhs,Eq,rhs) -> emitOp il lhs rhs "op_Equality"
-        | Comparison(lhs,Ne,rhs) -> emitOp il lhs rhs "op_Inequality"
-        | Comparison(lhs,Gt,rhs) -> emitOp il lhs rhs "op_GreaterThan"
-        | Comparison(lhs,Lt,rhs) -> emitOp il lhs rhs "op_LessThan"
-        | Comparison(lhs,Ge,rhs) -> emitOp il lhs rhs "op_GreaterThanOrEqual"
-        | Comparison(lhs,Le,rhs) -> emitOp il lhs rhs "op_LessThanOrEqual"
+        | Comparison(lhs,op,rhs) -> op |> toOp |> emitOp il lhs rhs 
         | Logical(lhs,And,rhs) -> emitOp il lhs rhs "op_And"
         | Logical(lhs,Or,rhs) -> emitOp il lhs rhs "op_Or"
+    and toOp = function
+        | Eq -> "op_Equality" | Ne -> "op_Inequality"
+        | Lt -> "op_LessThan" | Gt -> "op_GreaterThan"
+        | Le -> "op_LessThanOrEqual" | Ge -> "op_GreaterThanOrEqual"
     and emitOp (il:ILGenerator) lhs rhs op =
         emitExpression il lhs;
         emitExpression il rhs;
@@ -264,23 +263,35 @@ let emitInstructions
             methodIL := mainIL
         | Select(e) ->
             emitExpression il e
-            let caseLabel = il.DefineLabel()
             let endLabel = il.DefineLabel()
-            caseStack.Push(caseLabel)
-        | Case(x) ->
-            let caseLabel = caseStack.Pop()
-            il.MarkLabel(caseLabel)
-            il.Emit(OpCodes.Dup)
-            emitLiteral il x
-            let mi = typeof<Primitive>.GetMethod("op_Equality")
-            il.EmitCall(OpCodes.Call, mi, null)
-            emitConvertToBool il
+            caseStack.Push(None)
+        | Case(xs) ->
+            let endLabel =
+                match caseStack.Pop() with
+                | Some(caseLabel, endLabel) ->
+                    il.Emit(OpCodes.Br, endLabel)
+                    il.MarkLabel(caseLabel)
+                    endLabel
+                | None ->
+                    il.DefineLabel()
             let caseLabel = il.DefineLabel()
-            caseStack.Push(caseLabel)
-            il.Emit(OpCodes.Brfalse, caseLabel)
+            caseStack.Push(Some (caseLabel, endLabel))
+            let matchLabel = il.DefineLabel()
+            for Is(op,x) in xs do
+                il.Emit(OpCodes.Dup)
+                emitLiteral il x
+                let mi = typeof<Primitive>.GetMethod(toOp op)
+                il.EmitCall(OpCodes.Call, mi, null)
+                emitConvertToBool il
+                il.Emit(OpCodes.Brtrue, matchLabel)
+            il.Emit(OpCodes.Br, caseLabel)
+            il.MarkLabel(matchLabel)
         | EndSelect ->
-            let caseLabel = caseStack.Pop()
-            il.MarkLabel(caseLabel)
+            match caseStack.Pop() with
+            | Some(caseLabel,endLabel) ->
+                il.MarkLabel(caseLabel)
+                il.MarkLabel(endLabel)
+            | None -> ()
             il.Emit(OpCodes.Pop)
     // Iterate over instructions
     for instruction in instructions do 

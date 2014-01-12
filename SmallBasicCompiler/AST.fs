@@ -37,6 +37,8 @@ and invoke =
     | PropertyGet of string * string
 type assign =
     | Set of identifier * expr
+type clause =
+    | Is of comparison  * value
 /// Small Basic instruction
 type instruction =
     | Assign of assign
@@ -59,6 +61,6 @@ type instruction =
     | Function of identifier * string list
     | EndFunction
     | Select of expr
-    | Case of value
+    | Case of clause list
     | EndSelect
 // [/snippet]
