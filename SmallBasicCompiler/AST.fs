@@ -39,6 +39,7 @@ type assign =
     | Set of identifier * expr
 type clause =
     | Is of comparison  * value
+    | Any
 /// Small Basic instruction
 type instruction =
     | Assign of assign

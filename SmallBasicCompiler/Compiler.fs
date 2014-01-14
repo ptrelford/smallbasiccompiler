@@ -265,7 +265,7 @@ let emitInstructions
             emitExpression il e
             let endLabel = il.DefineLabel()
             caseStack.Push(None)
-        | Case(xs) ->
+        | Case(clauses) ->
             let endLabel =
                 match caseStack.Pop() with
                 | Some(caseLabel, endLabel) ->
@@ -277,13 +277,17 @@ let emitInstructions
             let caseLabel = il.DefineLabel()
             caseStack.Push(Some (caseLabel, endLabel))
             let matchLabel = il.DefineLabel()
-            for Is(op,x) in xs do
-                il.Emit(OpCodes.Dup)
-                emitLiteral il x
-                let mi = typeof<Primitive>.GetMethod(toOp op)
-                il.EmitCall(OpCodes.Call, mi, null)
-                emitConvertToBool il
-                il.Emit(OpCodes.Brtrue, matchLabel)
+            let emitClause = function
+                | Is(op,value) ->
+                    il.Emit(OpCodes.Dup)
+                    emitLiteral il value
+                    let mi = typeof<Primitive>.GetMethod(toOp op)
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitConvertToBool il
+                    il.Emit(OpCodes.Brtrue, matchLabel)
+                | Any ->
+                    il.Emit(OpCodes.Br, matchLabel)
+            for clause in clauses do emitClause clause
             il.Emit(OpCodes.Br, caseLabel)
             il.MarkLabel(matchLabel)
         | EndSelect ->

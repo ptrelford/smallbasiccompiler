@@ -56,42 +56,44 @@ let comparisons = ["=",Eq; "<>",Ne; "<=",Le; ">=",Ge; "<",Lt; ">",Gt]
 for s,op in comparisons do
     opp.AddOperator(InfixOperator(s, ws, 2, Assoc.Left, fun x y -> Comparison(x, op, y)))
 
+let pexpr =  pterm
+
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
-let ptuple = between (str_ws "(") (str_ws ")") (sepBy pterm (str_ws ","))
+let pparamtuple = between (str_ws "(") (str_ws ")") (sepBy pexpr (str_ws ","))
 let pmemberinvoke =
-    pipe2 pmember (opt ptuple)
+    pipe2 pmember (opt pparamtuple)
         (fun (tn,mn) args -> 
         match args with
         | Some args -> Method(tn, mn, args)
         | None -> PropertyGet(tn,mn)
         )
-let pcall = pidentifier_ws .>>. ptuple |>> (fun (name,args) -> Call(name, args))
+let pcall = pidentifier_ws .>>. pparamtuple |>> (fun (name,args) -> Call(name, args))
 
 pinvokeimpl := attempt pcall <|> attempt pmemberinvoke 
 
 let paction = pinvoke |>> (fun x -> Action(x))
-let pset = pipe3 pidentifier_ws (str_ws "=") pterm (fun id _ e -> Set(id, e))
-let passign = pipe3 pidentifier_ws (str_ws "=") pterm (fun id _ e -> Assign(Set(id, e)))
-let ppropertyset = pipe3 pmember (str_ws "=") pterm (fun (tn,pn) _ e -> PropertySet(tn,pn,e))
+let pset = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Set(id, e))
+let passign = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Assign(Set(id, e)))
+let ppropertyset = pipe3 pmember (str_ws "=") pexpr (fun (tn,pn) _ e -> PropertySet(tn,pn,e))
 
-let pindex = str_ws "[" >>. pterm .>> str_ws "]"
+let pindex = str_ws "[" >>. pexpr .>> str_ws "]"
 let pindices = many1 pindex
 plocationimpl := pipe2 pidentifier_ws pindices (fun id xs -> Location(id,xs))
-let psetat = pipe3 plocation (str_ws "=") pterm (fun loc _ e -> SetAt(loc, e))
+let psetat = pipe3 plocation (str_ws "=") pexpr (fun loc _ e -> SetAt(loc, e))
 
 let pfor =
     let pfrom = str_ws1 "For" >>. pset
-    let pto = str_ws1 "To" >>. pterm
-    let pstep = str_ws1 "Step" >>. pterm
+    let pto = str_ws1 "To" >>. pexpr
+    let pstep = str_ws1 "Step" >>. pexpr
     let toStep = function None -> Literal(Int(1)) | Some s -> s
     pipe3 pfrom pto (opt pstep) (fun f t s -> For(f, t, toStep s))
 let pendfor = str_ws "EndFor" |>> (fun _ -> EndFor)
 
-let pwhile = str_ws1 "While" >>. pterm |>> (fun e -> While(e))
+let pwhile = str_ws1 "While" >>. pexpr |>> (fun e -> While(e))
 let pendwhile = str_ws "EndWhile" |>> (fun _ -> EndWhile)
 
-let pif = str_ws1 "If" >>. pterm .>> str_ws "Then" |>> (fun e -> If(e))
-let pelseif = str_ws1 "ElseIf" >>. pterm .>> str_ws "Then" |>> (fun e -> ElseIf(e))
+let pif = str_ws1 "If" >>. pexpr .>> str_ws "Then" |>> (fun e -> If(e))
+let pelseif = str_ws1 "ElseIf" >>. pexpr .>> str_ws "Then" |>> (fun e -> ElseIf(e))
 let pelse = str_ws "Else" |>> (fun _ -> Else)
 let pendif = str_ws "EndIf" |>> (fun _ -> EndIf)
 
@@ -108,15 +110,16 @@ let pgoto = str_ws1 "Goto" >>. pidentifier |>> (fun label -> Goto(label))
 let pfunction = str_ws1 "Function" >>. pmethod |>> (fun (name,ps) -> Function(name,ps))
 let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 
-let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pterm
+let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pexpr
               |>> (fun e -> Select(e))
 
 let pcomparison = choice [ for s,op in comparisons -> str_ws1 s |>> fun _ -> op]
 let pis = str_ws1 "Is" >>. pcomparison .>>. pvalue |>> (fun (op,x) -> Is(op,x))
+let pany = str_ws "Else" |>> (fun _ -> Any)
 let pisequal = pvalue |>> (fun x -> Is(Eq,x))
 let pcase = 
     str_ws1 "Case" >>. 
-    sepBy (attempt pis <|> attempt pisequal) (str_ws ",")
+    sepBy (attempt pis <|> attempt pisequal <|> attempt pany) (str_ws ",")
     |>> (fun xs -> Case(xs))
 let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
 
@@ -148,23 +151,4 @@ let parse (program:string) =
         |> List.choose (function Instruction i -> Some i | Blank -> None) 
         |> List.toArray
     | Failure(errorMsg, e, s) -> failwith errorMsg
-// [/snippet]
-
-type Color = System.ConsoleColor
-// [snippet:Library]
-type TextWindow private () =
-    static member WriteLine (o:obj) = System.Console.WriteLine(o)
-    static member ForegroundColor
-        with get () = System.Console.ForegroundColor.ToString()
-        and set color =   
-            let color = Color.Parse(typeof<Color>, color, true)
-            System.Console.ForegroundColor <- color :?> Color
-type Clock private () =
-    static let now() = System.DateTime.Now
-    static member Year = now().Year
-    static member Month = now().Month
-    static member Day = now().Day
-
-type IMarker = interface end
-let getLibraryType name = typeof<IMarker>.DeclaringType.GetNestedType(name) 
 // [/snippet]
