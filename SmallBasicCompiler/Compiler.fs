@@ -224,12 +224,29 @@ let emitInstructions
             il.EmitCall(OpCodes.Call, mi, null)
             il.Emit(OpCodes.Stsfld, fieldLookup name)
             il.MarkLabel(compare)
+            let positiveStep = il.DefineLabel()
+            let cont = il.DefineLabel()
+            emitExpression il step
+            emitExpression il (Literal(Int(0)))
+            let mi = typeof<Primitive>.GetMethod("op_LessThanOrEqual")
+            il.EmitCall(OpCodes.Call, mi, null)
+            emitConvertToBool il
+            il.Emit(OpCodes.Brfalse, positiveStep)
+            emitExpression il (Identifier(name))
+            emitExpression il until
+            let mi = typeof<Primitive>.GetMethod("op_GreaterThanOrEqual")
+            il.EmitCall(OpCodes.Call, mi, null)
+            emitConvertToBool il
+            il.Emit(OpCodes.Brfalse, endFor)
+            il.Emit(OpCodes.Br, cont)
+            il.MarkLabel(positiveStep)
             emitExpression il (Identifier(name))
             emitExpression il until
             let mi = typeof<Primitive>.GetMethod("op_LessThanOrEqual")
             il.EmitCall(OpCodes.Call, mi, null)
             emitConvertToBool il
             il.Emit(OpCodes.Brfalse, endFor)
+            il.MarkLabel(cont)
         | While(condition) ->
             let beginWhile = il.DefineLabel()
             let endWhile = il.DefineLabel()
