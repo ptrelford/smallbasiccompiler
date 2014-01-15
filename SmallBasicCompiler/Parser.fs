@@ -114,12 +114,14 @@ let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pexpr
               |>> (fun e -> Select(e))
 
 let pcomparison = choice [ for s,op in comparisons -> str_ws1 s |>> fun _ -> op]
+let prange = pvalue .>> ws .>> str_ws1 "To" .>>. pvalue |>> (fun (a,b) -> Range(a,b))
 let pis = str_ws1 "Is" >>. pcomparison .>>. pvalue |>> (fun (op,x) -> Is(op,x))
 let pany = str_ws "Else" |>> (fun _ -> Any)
 let pisequal = pvalue |>> (fun x -> Is(Eq,x))
-let pcase = 
-    str_ws1 "Case" >>. 
-    sepBy (attempt pis <|> attempt pisequal <|> attempt pany) (str_ws ",")
+let pclause = attempt prange <|> attempt pis <|> attempt pisequal <|> attempt pany
+let pcase =
+    str_ws1 "Case" >>.
+    sepBy pclause (str_ws ",") 
     |>> (fun xs -> Case(xs))
 let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
 

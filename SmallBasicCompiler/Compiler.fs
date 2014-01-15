@@ -278,6 +278,8 @@ let emitInstructions
             caseStack.Push(Some (caseLabel, endLabel))
             let matchLabel = il.DefineLabel()
             let emitClause = function
+                | Any ->
+                    il.Emit(OpCodes.Br, matchLabel)
                 | Is(op,value) ->
                     il.Emit(OpCodes.Dup)
                     emitLiteral il value
@@ -285,8 +287,21 @@ let emitInstructions
                     il.EmitCall(OpCodes.Call, mi, null)
                     emitConvertToBool il
                     il.Emit(OpCodes.Brtrue, matchLabel)
-                | Any ->
-                    il.Emit(OpCodes.Br, matchLabel)
+                | Range(from,until) ->
+                    il.Emit(OpCodes.Dup)
+                    emitLiteral il from
+                    let below = il.DefineLabel()
+                    let mi = typeof<Primitive>.GetMethod(toOp Lt)
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitConvertToBool il
+                    il.Emit(OpCodes.Brtrue, below)
+                    il.Emit(OpCodes.Dup)
+                    emitLiteral il until
+                    let mi = typeof<Primitive>.GetMethod(toOp Le)
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitConvertToBool il
+                    il.Emit(OpCodes.Brtrue, matchLabel)
+                    il.MarkLabel(below)
             for clause in clauses do emitClause clause
             il.Emit(OpCodes.Br, caseLabel)
             il.MarkLabel(matchLabel)

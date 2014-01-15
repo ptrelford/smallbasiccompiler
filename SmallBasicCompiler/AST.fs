@@ -38,8 +38,9 @@ and invoke =
 type assign =
     | Set of identifier * expr
 type clause =
-    | Is of comparison  * value
     | Any
+    | Is of comparison  * value
+    | Range of value * value
 /// Small Basic instruction
 type instruction =
     | Assign of assign
