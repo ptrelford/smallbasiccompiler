@@ -53,10 +53,15 @@ let emitInstructions
     let methodIL = ref mainIL
     /// Name of current method
     let methodName = ref "Main"
+    /// Loop stack for for & while statements
     let loopStack = Stack<Label * Label>()
+    /// If stack
     let ifStack = Stack<Label * Label>()
+    /// Case stack
     let caseStack = Stack<(Label * Label) option>()
+    /// Labels for goto statements
     let labels = Dictionary<string, Label>()
+    /// Gets an existing label or creates a new label
     let obtainLabel (il:ILGenerator) name =
         match labels.TryGetValue(name) with
         | true, label -> label
@@ -64,49 +69,54 @@ let emitInstructions
             let label = il.DefineLabel()
             labels.Add(name, label)
             label
+    /// Get fully qualified type name for SmallBasicLibrary type
     let getLibraryTypeName name =
         sprintf "Microsoft.SmallBasic.Library.%s, SmallBasicLibrary" name
-    let emitPrimitive (il:ILGenerator) t =
+    let emitNewPrimitive (il:ILGenerator) t =
         let ci = typeof<Primitive>.GetConstructor([|t|])
         il.Emit(OpCodes.Newobj, ci) 
     let emitLiteral (il:ILGenerator) = function
         | Bool(true) -> 
             il.Emit(OpCodes.Ldc_I4_1)
-            emitPrimitive il typeof<bool>
+            emitNewPrimitive il typeof<bool>
         | Bool(false) -> 
             il.Emit(OpCodes.Ldc_I4_0)
-            emitPrimitive il typeof<bool>
+            emitNewPrimitive il typeof<bool>
         | Int(n) -> 
             il.Emit(OpCodes.Ldc_I4, n) 
-            emitPrimitive il typeof<int>
+            emitNewPrimitive il typeof<int>
         | Double(n) -> 
             il.Emit(OpCodes.Ldc_R8, n) 
-            emitPrimitive il typeof<double>
+            emitNewPrimitive il typeof<double>
         | String(s) -> 
             il.Emit(OpCodes.Ldstr, s); 
-            emitPrimitive il typeof<string>
+            emitNewPrimitive il typeof<string>
         | Array(_) -> raise (NotImplementedException())
+    let emitNewCallback (il:ILGenerator) name =
+        il.Emit(OpCodes.Ldnull)
+        il.Emit(OpCodes.Ldftn, fst methods.[name])
+        let cb = typeof<SmallBasicCallback>
+        let ci = cb.GetConstructor([|typeof<obj>;typeof<IntPtr>|])
+        il.Emit(OpCodes.Newobj, ci)
+    let emitLdArg (il:ILGenerator) = function
+        | 0 -> il.Emit(OpCodes.Ldarg_0)
+        | 1 -> il.Emit(OpCodes.Ldarg_1)
+        | 2 -> il.Emit(OpCodes.Ldarg_2)
+        | 3 -> il.Emit(OpCodes.Ldarg_3)
+        | i -> il.Emit(OpCodes.Ldarg,i)
     let rec emitExpression (il:ILGenerator) = function
         | Literal(x) -> emitLiteral il x
         | Identifier(name) ->
-            let getParamIndex =
+            let paramIndex =
                 match methods.TryGetValue(!methodName) with
                 | true, (_,ps) -> ps |> List.tryFindIndex ((=) name) 
                 | false, _ -> None
-            match getParamIndex with
-            | Some 0 -> il.Emit(OpCodes.Ldarg_0)
-            | Some 1 -> il.Emit(OpCodes.Ldarg_1)
-            | Some 2 -> il.Emit(OpCodes.Ldarg_2)
-            | Some 3 -> il.Emit(OpCodes.Ldarg_3)
-            | Some i -> il.Emit(OpCodes.Ldarg, i)
+            match paramIndex with
+            | Some i -> emitLdArg il i
             | None ->
                 match fields.TryGetValue(name) with
                 | true, field -> il.Emit(OpCodes.Ldsfld, field)
-                | false, _ ->
-                    il.Emit(OpCodes.Ldnull)
-                    il.Emit(OpCodes.Ldftn, fst methods.[name])
-                    let ci = typeof<SmallBasicCallback>.GetConstructor([|typeof<obj>;typeof<IntPtr>|])
-                    il.Emit(OpCodes.Newobj, ci) 
+                | false, _ -> emitNewCallback il name
         | GetAt(Location(name,indices)) ->
             il.Emit(OpCodes.Ldsfld, fieldLookup name)
             for index in indices do
@@ -151,40 +161,41 @@ let emitInstructions
             il.EmitCall(OpCodes.Call, pi.GetGetMethod(), null)
     and emitArgs (il:ILGenerator) args =
         for arg in args do emitExpression il arg
-    let emitSet (il:ILGenerator) = function
-        | Set(name,e) ->
-            emitExpression il e
-            il.Emit(OpCodes.Stsfld, fieldLookup name)
+    let emitSet (il:ILGenerator) (Set(name,e)) =
+        emitExpression il e
+        il.Emit(OpCodes.Stsfld, fieldLookup name)
+    let emitSetAt (il:ILGenerator) (Location(name,indices),e) =
+        emitExpression il e
+        let lastIndex = indices.Length - 1
+        for lastIndex = indices.Length - 1 downto 0 do
+            il.Emit(OpCodes.Ldsfld, fieldLookup name)
+            for index = 0 to lastIndex - 1 do
+                emitExpression il indices.[index]
+                let mi = typeof<Primitive>.GetMethod("GetArrayValue")
+                il.EmitCall(OpCodes.Call, mi, null)
+            emitExpression il indices.[lastIndex]
+            let mi = typeof<Primitive>.GetMethod("SetArrayValue")
+            il.EmitCall(OpCodes.Call, mi, null)
+        il.Emit(OpCodes.Stsfld, fieldLookup name)
+    let emitPropertySet (il:ILGenerator) typeName name e =
+        emitExpression il e
+        let typeName = getLibraryTypeName typeName 
+        let ty = Type.GetType(typeName)
+        let pi = ty.GetProperty(name)
+        if pi <> null
+        then
+            il.EmitCall(OpCodes.Call, pi.GetSetMethod(), null)
+        else
+            let ei = ty.GetEvent(name)
+            il.EmitCall(OpCodes.Call, ei.GetAddMethod(), null)
     let emitConvertToBool (il:ILGenerator) =
         let mi = typeof<Primitive>.GetMethod("ConvertToBoolean")
         il.EmitCall(OpCodes.Call, mi, null)
     let emitInstruction (il:ILGenerator) = function
         | Assign(set) -> emitSet il set
-        | SetAt(Location(name,indices),e) ->
-            emitExpression il e
-            let lastIndex = indices.Length - 1
-            for lastIndex = indices.Length - 1 downto 0 do
-                il.Emit(OpCodes.Ldsfld, fieldLookup name)
-                for index = 0 to lastIndex - 1 do
-                    emitExpression il indices.[index]
-                    let mi = typeof<Primitive>.GetMethod("GetArrayValue")
-                    il.EmitCall(OpCodes.Call, mi, null)
-                emitExpression il indices.[lastIndex]
-                let mi = typeof<Primitive>.GetMethod("SetArrayValue")
-                il.EmitCall(OpCodes.Call, mi, null)
-            il.Emit(OpCodes.Stsfld, fieldLookup name)
+        | SetAt(location,e) -> emitSetAt il (location,e)
         | Action(invoke) -> emitInvoke il invoke
-        | PropertySet(typeName,name,e) ->
-            emitExpression il e
-            let typeName = getLibraryTypeName typeName 
-            let ty = Type.GetType(typeName)
-            let pi = ty.GetProperty(name)
-            if pi <> null
-            then
-                il.EmitCall(OpCodes.Call, pi.GetSetMethod(), null)
-            else
-                let ei = ty.GetEvent(name)
-                il.EmitCall(OpCodes.Call, ei.GetAddMethod(), null)
+        | PropertySet(typeName,name,e) -> emitPropertySet il typeName name e
         | If(condition) ->
             let elseLabel = il.DefineLabel()
             let endLabel = il.DefineLabel()
@@ -211,39 +222,35 @@ let emitInstructions
             il.MarkLabel(elseLabel)
             if elseLabel <> endLabel then il.MarkLabel(endLabel)
         | For((Set(name,x)) as set, until, step) ->
-            emitSet il set
             let beginFor = il.DefineLabel()
             let endFor = il.DefineLabel()
-            let compare = il.DefineLabel()
             loopStack.Push(beginFor,endFor)
+            // Initialize counter
+            emitSet il set
+            // Skip step on first iteration
+            let compare = il.DefineLabel()
             il.Emit(OpCodes.Br, compare)
+            // Begin for loop
             il.MarkLabel(beginFor)
-            emitExpression il (Identifier(name))
-            emitExpression il step
-            let mi = typeof<Primitive>.GetMethod("op_Addition")
-            il.EmitCall(OpCodes.Call, mi, null)
+            // Step
+            emitExpression il (Arithmetic(Identifier(name),Add,step))
             il.Emit(OpCodes.Stsfld, fieldLookup name)
+            // Compare
             il.MarkLabel(compare)
+            // Is step +ve or -ve
             let positiveStep = il.DefineLabel()
             let cont = il.DefineLabel()
-            emitExpression il step
-            emitExpression il (Literal(Int(0)))
-            let mi = typeof<Primitive>.GetMethod("op_LessThanOrEqual")
-            il.EmitCall(OpCodes.Call, mi, null)
+            emitExpression il (Comparison(step,Le,Literal(Int(0))))
             emitConvertToBool il
             il.Emit(OpCodes.Brfalse, positiveStep)
-            emitExpression il (Identifier(name))
-            emitExpression il until
-            let mi = typeof<Primitive>.GetMethod("op_GreaterThanOrEqual")
-            il.EmitCall(OpCodes.Call, mi, null)
+            // -ve step
+            emitExpression il (Comparison(Identifier(name),Ge,until))
             emitConvertToBool il
             il.Emit(OpCodes.Brfalse, endFor)
             il.Emit(OpCodes.Br, cont)
+            // +ve step
             il.MarkLabel(positiveStep)
-            emitExpression il (Identifier(name))
-            emitExpression il until
-            let mi = typeof<Primitive>.GetMethod("op_LessThanOrEqual")
-            il.EmitCall(OpCodes.Call, mi, null)
+            emitExpression il (Comparison(Identifier(name),Le,until))
             emitConvertToBool il
             il.Emit(OpCodes.Brfalse, endFor)
             il.MarkLabel(cont)
@@ -294,29 +301,23 @@ let emitInstructions
             let caseLabel = il.DefineLabel()
             caseStack.Push(Some (caseLabel, endLabel))
             let matchLabel = il.DefineLabel()
+            let emitCompare op value =
+                il.Emit(OpCodes.Dup)
+                emitLiteral il value
+                let mi = typeof<Primitive>.GetMethod(toOp op)
+                il.EmitCall(OpCodes.Call, mi, null)
+                emitConvertToBool il
             let emitClause = function
                 | Any ->
                     il.Emit(OpCodes.Br, matchLabel)
                 | Is(op,value) ->
-                    il.Emit(OpCodes.Dup)
-                    emitLiteral il value
-                    let mi = typeof<Primitive>.GetMethod(toOp op)
-                    il.EmitCall(OpCodes.Call, mi, null)
-                    emitConvertToBool il
+                    emitCompare op value
                     il.Emit(OpCodes.Brtrue, matchLabel)
                 | Range(from,until) ->
-                    il.Emit(OpCodes.Dup)
-                    emitLiteral il from
                     let below = il.DefineLabel()
-                    let mi = typeof<Primitive>.GetMethod(toOp Lt)
-                    il.EmitCall(OpCodes.Call, mi, null)
-                    emitConvertToBool il
+                    emitCompare Lt from
                     il.Emit(OpCodes.Brtrue, below)
-                    il.Emit(OpCodes.Dup)
-                    emitLiteral il until
-                    let mi = typeof<Primitive>.GetMethod(toOp Le)
-                    il.EmitCall(OpCodes.Call, mi, null)
-                    emitConvertToBool il
+                    emitCompare Le until
                     il.Emit(OpCodes.Brtrue, matchLabel)
                     il.MarkLabel(below)
             for clause in clauses do emitClause clause
