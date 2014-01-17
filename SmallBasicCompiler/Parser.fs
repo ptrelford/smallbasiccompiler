@@ -56,11 +56,13 @@ let comparisons = ["=",Eq; "<>",Ne; "<=",Le; ">=",Ge; "<",Lt; ">",Gt]
 for s,op in comparisons do
     opp.AddOperator(InfixOperator(s, ws, 2, Assoc.Left, fun x y -> Comparison(x, op, y)))
 
-let pnewtuple =
-    between (str_ws "(") (str_ws ")") (sepBy1 pterm (str_ws ","))
+let pnewtuple, pnewtupleimpl = createParserForwardedToRef ()
+let pconstruct = attempt pterm <|> attempt pnewtuple
+pnewtupleimpl :=
+    between (str_ws "(") (str_ws ")") (sepBy1 pconstruct (str_ws ","))
     |>> (fun xs -> NewTuple(xs))
 
-let pexpr = attempt pnewtuple <|> attempt pterm
+let pexpr = pconstruct //attempt pnewtuple <|> attempt pterm
 
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
 let pargs = between (str_ws "(") (str_ws ")") (sepBy pexpr (str_ws ","))
@@ -80,9 +82,12 @@ let pset = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Set(id, e))
 let passign = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Assign(Set(id, e)))
 let ppropertyset = pipe3 pmember (str_ws "=") pexpr (fun (tn,pn) _ e -> PropertySet(tn,pn,e))
 
-let ptuple =  
-    between (str_ws "(") (str_ws ")") (sepBy pidentifier_ws (str_ws ","))
-    |>> (fun xs -> Tuple([for x in xs -> Bind(x)]))
+let ptuple, ptupleimpl = createParserForwardedToRef ()
+let pbind = pidentifier_ws |>> (fun s -> Bind(s))
+let ppattern = attempt pbind  <|> attempt ptuple
+ptupleimpl :=
+    between (str_ws "(") (str_ws ")") (sepBy ppattern (str_ws ","))
+    |>> (fun xs -> Tuple(xs))
 
 let pdeconstruct = pipe3 ptuple (str_ws "=") pexpr (fun p _ e -> Deconstruct(p,e))
 
