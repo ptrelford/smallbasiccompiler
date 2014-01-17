@@ -1,24 +1,27 @@
 ﻿let source = """
 ' Returns Modulus
-Function Modulus(Dividend,Divisor)
-  Modulus = Dividend
-  While Modulus >= Divisor
-    Modulus = Modulus - Divisor
+Function Mod(Dividend,Divisor)
+  Mod = Dividend
+  While Mod >= Divisor
+    Mod = Mod - Divisor
   EndWhile
 EndFunction
 
+Sub Echo(s)
+  TextWindow.WriteLine(s)
+EndSub
+
 For A = 1 To 100 ' Iterate from 1 to 100
-  Mod3 = Modulus(A,3) ' A % 3
-  Mod5 = Modulus(A,5) ' A % 5
-  If Mod3 = 0 And Mod5 = 0 Then
-    TextWindow.WriteLine("FizzBuzz")
-  ElseIf Mod3 = 0 Then
-    TextWindow.WriteLine("Fizz")
-  ElseIf Mod5 = 0 Then
-    TextWindow.WriteLine("Buzz")
-  Else
-    TextWindow.WriteLine(A)
-  EndIf
+  Select Case (Mod(A,3),Mod(A,5))
+    Case (0,0)
+      Echo("FizzBuzz")
+    Case (0,_)
+      Echo("Fizz")
+    Case (_,0)
+      Echo("Buzz")
+    Case Else
+      Echo(A)
+  EndSelect
 EndFor
 """
 

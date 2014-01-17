@@ -13,6 +13,7 @@ let generateFields (typeBuilder:TypeBuilder) (instructions:instruction[]) =
     let (|Bound|) pattern =
         let rec bound = function
             | Bind name -> [name]
+            | Clause _ -> []
             | Tuple(xs) -> [for x in xs do yield! bound x]
         bound pattern
     [for instruction in instructions do
@@ -215,6 +216,7 @@ let emitInstructions
             let rec deconstruct = function
                 | Bind("_") -> il.Emit(OpCodes.Pop)
                 | Bind(name) -> il.Emit(OpCodes.Stsfld, fieldLookup name)
+                | Clause(_) -> raise (NotImplementedException())
                 | Tuple(xs) ->
                     xs |> List.iteri (fun i x ->
                         il.Emit(OpCodes.Dup)
@@ -332,14 +334,13 @@ let emitInstructions
                     il.DefineLabel()
             let caseLabel = il.DefineLabel()
             caseStack.Push(Some (caseLabel, endLabel))
-            let matchLabel = il.DefineLabel()
             let emitCompare op value =
                 il.Emit(OpCodes.Dup)
                 emitLiteral il value
                 let mi = typeof<Primitive>.GetMethod(toOp op)
                 il.EmitCall(OpCodes.Call, mi, null)
                 emitConvertToBool il
-            let emitClause = function
+            let rec emitClause (matchLabel:Label) = function
                 | Any ->
                     il.Emit(OpCodes.Br, matchLabel)
                 | Is(op,value) ->
@@ -352,9 +353,32 @@ let emitInstructions
                     emitCompare Le until
                     il.Emit(OpCodes.Brtrue, matchLabel)
                     il.MarkLabel(below)
-            for clause in clauses do emitClause clause
+                | Pattern(Tuple(patterns)) ->
+                    let failLabel = il.DefineLabel()
+                    // TODO: Check x.IsArray & x.Length = patterns.Length
+                    patterns |> List.iteri (fun i pattern ->
+                        match pattern with
+                        | Bind("_") -> ()
+                        | Clause(clause) ->
+                            let itemLabel = il.DefineLabel()
+                            il.Emit(OpCodes.Dup)
+                            emitExpression il (Literal(Int(i)))
+                            let mi = typeof<Primitive>.GetMethod("GetArrayValue")
+                            il.EmitCall(OpCodes.Call, mi, null)
+                            emitClause itemLabel clause
+                            il.Emit(OpCodes.Pop)
+                            il.Emit(OpCodes.Br, failLabel)
+                            il.MarkLabel(itemLabel)
+                            il.Emit(OpCodes.Pop)
+                        | _ -> raise (NotImplementedException())
+                    )
+                    il.Emit(OpCodes.Br, matchLabel)
+                    il.MarkLabel(failLabel)
+                | Pattern(_) -> raise (NotImplementedException())
+            let clauseLabel = il.DefineLabel()
+            for clause in clauses do emitClause clauseLabel clause
             il.Emit(OpCodes.Br, caseLabel)
-            il.MarkLabel(matchLabel)
+            il.MarkLabel(clauseLabel)
         | EndSelect ->
             match caseStack.Pop() with
             | Some(caseLabel,endLabel) ->

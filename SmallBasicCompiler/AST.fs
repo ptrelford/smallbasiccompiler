@@ -19,13 +19,15 @@ type value =
     | Double of double
     | String of string
     | Array of HashTable<value,value>
-type clause =
+type pattern =
+    | Bind of identifier
+    | Clause of clause
+    | Tuple of pattern list
+and clause =
     | Any
     | Is of comparison  * value
     | Range of value * value
-type pattern =
-    | Bind of identifier
-    | Tuple of pattern list
+    | Pattern of pattern
 /// Small Basic expression
 type expr =
     | Literal of value

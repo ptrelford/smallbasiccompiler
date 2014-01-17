@@ -62,7 +62,7 @@ pnewtupleimpl :=
     between (str_ws "(") (str_ws ")") (sepBy1 pconstruct (str_ws ","))
     |>> (fun xs -> NewTuple(xs))
 
-let pexpr = pconstruct //attempt pnewtuple <|> attempt pterm
+let pexpr = pconstruct
 
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
 let pargs = between (str_ws "(") (str_ws ")") (sepBy pexpr (str_ws ","))
@@ -81,15 +81,6 @@ let paction = pinvoke |>> (fun x -> Action(x))
 let pset = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Set(id, e))
 let passign = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Assign(Set(id, e)))
 let ppropertyset = pipe3 pmember (str_ws "=") pexpr (fun (tn,pn) _ e -> PropertySet(tn,pn,e))
-
-let ptuple, ptupleimpl = createParserForwardedToRef ()
-let pbind = pidentifier_ws |>> (fun s -> Bind(s))
-let ppattern = attempt pbind  <|> attempt ptuple
-ptupleimpl :=
-    between (str_ws "(") (str_ws ")") (sepBy ppattern (str_ws ","))
-    |>> (fun xs -> Tuple(xs))
-
-let pdeconstruct = pipe3 ptuple (str_ws "=") pexpr (fun p _ e -> Deconstruct(p,e))
 
 let pindex = str_ws "[" >>. pexpr .>> str_ws "]"
 let pindices = many1 pindex
@@ -128,17 +119,32 @@ let pendfunction = str_ws "EndFunction" |>> (fun _ -> EndFunction)
 let pselect = str_ws1 "Select" >>. str_ws1 "Case" >>. pexpr
               |>> (fun e -> Select(e))
 
+let ptuple, ptupleimpl = createParserForwardedToRef ()
+
 let prange = pvalue .>> ws .>> str_ws1 "To" .>>. pvalue |>> (fun (a,b) -> Range(a,b))
 let pcomparison = choice [ for s,op in comparisons -> str_ws1 s |>> fun _ -> op]
 let pis = str_ws1 "Is" >>. pcomparison .>>. pvalue |>> (fun (op,x) -> Is(op,x))
 let pisequal = pvalue |>> (fun x -> Is(Eq,x))
 let pany = str_ws "Else" |>> (fun _ -> Any)
-let pclause = attempt prange <|> attempt pis <|> attempt pisequal <|> attempt pany
+let pclause = 
+    attempt prange <|> attempt pis <|> attempt pisequal <|> attempt pany <|>
+    attempt (ptuple |>> (fun x -> Pattern(x)))
 let pcase =
     str_ws1 "Case" >>.
     sepBy pclause (str_ws ",") 
     |>> (fun xs -> Case(xs))
 let pendselect = str_ws "EndSelect" |>> (fun _ -> EndSelect)
+
+let pbind = pidentifier_ws |>> (fun s -> Bind(s))
+let ppattern =
+    attempt ptuple <|>
+    (attempt pclause |>> (fun c -> Clause(c))) <|>
+    attempt pbind
+ptupleimpl :=
+    between (str_ws "(") (str_ws ")") (sepBy ppattern (str_ws ","))
+    |>> (fun xs -> Tuple(xs))
+
+let pdeconstruct = pipe3 ptuple (str_ws "=") pexpr (fun p _ e -> Deconstruct(p,e))
 
 let pinstruct = 
     [
