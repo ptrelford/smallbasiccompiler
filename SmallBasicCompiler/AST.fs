@@ -19,6 +19,13 @@ type value =
     | Double of double
     | String of string
     | Array of HashTable<value,value>
+type clause =
+    | Any
+    | Is of comparison  * value
+    | Range of value * value
+type pattern =
+    | Bind of identifier
+    | Tuple of pattern list
 /// Small Basic expression
 type expr =
     | Literal of value
@@ -29,6 +36,7 @@ type expr =
     | Arithmetic of expr * arithmetic * expr
     | Comparison of expr * comparison * expr
     | Logical of expr * logical * expr
+    | NewTuple of expr list // Language extension
 and location =
     | Location of identifier * expr list
 and invoke =
@@ -37,13 +45,10 @@ and invoke =
     | PropertyGet of string * string
 type assign =
     | Set of identifier * expr
-type clause =
-    | Any
-    | Is of comparison  * value
-    | Range of value * value
 /// Small Basic instruction
 type instruction =
     | Assign of assign
+    | Deconstruct of pattern * expr // Language extension
     | SetAt of location * expr
     | PropertySet of string * string * expr
     | Action of invoke

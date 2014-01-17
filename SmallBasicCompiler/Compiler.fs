@@ -10,10 +10,16 @@ open Microsoft.SmallBasic.Library
 let generateFields (typeBuilder:TypeBuilder) (instructions:instruction[]) =
     let generateField name = 
         typeBuilder.DefineField(name, typeof<Primitive>, FieldAttributes.Static)
+    let (|Bound|) pattern =
+        let rec bound = function
+            | Bind name -> [name]
+            | Tuple(xs) -> [for x in xs do yield! bound x]
+        bound pattern
     [for instruction in instructions do
         match instruction with
         | Assign(Set(name,_)) -> yield name
         | SetAt(Location(name,_),_) -> yield name
+        | Deconstruct(Bound names,_) -> yield! names
         | For(Set(name,_),_,_) -> yield name
         | _ -> ()
     ]
@@ -135,6 +141,17 @@ let emitInstructions
         | Comparison(lhs,op,rhs) -> op |> toOp |> emitOp il lhs rhs 
         | Logical(lhs,And,rhs) -> emitOp il lhs rhs "op_And"
         | Logical(lhs,Or,rhs) -> emitOp il lhs rhs "op_Or"
+        | NewTuple(xs) ->
+            let array = il.DeclareLocal(typeof<Primitive>)
+            xs |> List.iteri (fun i x ->
+                emitExpression il x
+                il.Emit(OpCodes.Ldloc, array.LocalIndex)
+                emitExpression il (Literal(Int(i)))
+                let mi = typeof<Primitive>.GetMethod("SetArrayValue")
+                il.EmitCall(OpCodes.Call, mi, null)
+                il.Emit(OpCodes.Stloc, array.LocalIndex)
+            )
+            il.Emit(OpCodes.Ldloc, array.LocalIndex)
     and toOp = function
         | Eq -> "op_Equality" | Ne -> "op_Inequality"
         | Lt -> "op_LessThan" | Gt -> "op_GreaterThan"
@@ -193,6 +210,21 @@ let emitInstructions
         il.EmitCall(OpCodes.Call, mi, null)
     let emitInstruction (il:ILGenerator) = function
         | Assign(set) -> emitSet il set
+        | Deconstruct(pattern, e) ->
+            emitExpression il e
+            let rec deconstruct = function
+                | Bind("_") -> il.Emit(OpCodes.Pop)
+                | Bind(name) -> il.Emit(OpCodes.Stsfld, fieldLookup name)
+                | Tuple(xs) ->
+                    xs |> List.iteri (fun i x ->
+                        il.Emit(OpCodes.Dup)
+                        emitExpression il (Literal(Int(i)))
+                        let mi = typeof<Primitive>.GetMethod("GetArrayValue")
+                        il.EmitCall(OpCodes.Call, mi, null)
+                        deconstruct x
+                    )
+            deconstruct pattern
+            il.Emit(OpCodes.Pop)
         | SetAt(location,e) -> emitSetAt il (location,e)
         | Action(invoke) -> emitInvoke il invoke
         | PropertySet(typeName,name,e) -> emitPropertySet il typeName name e

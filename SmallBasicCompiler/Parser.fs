@@ -56,18 +56,22 @@ let comparisons = ["=",Eq; "<>",Ne; "<=",Le; ">=",Ge; "<",Lt; ">",Gt]
 for s,op in comparisons do
     opp.AddOperator(InfixOperator(s, ws, 2, Assoc.Left, fun x y -> Comparison(x, op, y)))
 
-let pexpr =  pterm
+let pnewtuple =
+    between (str_ws "(") (str_ws ")") (sepBy1 pterm (str_ws ","))
+    |>> (fun xs -> NewTuple(xs))
+
+let pexpr = attempt pnewtuple <|> attempt pterm
 
 let pmember = pipe3 (pidentifier_ws) (pchar '.') (pidentifier_ws) (fun tn _ mn -> tn,mn) 
-let pparamtuple = between (str_ws "(") (str_ws ")") (sepBy pexpr (str_ws ","))
+let pargs = between (str_ws "(") (str_ws ")") (sepBy pexpr (str_ws ","))
 let pmemberinvoke =
-    pipe2 pmember (opt pparamtuple)
+    pipe2 pmember (opt pargs)
         (fun (tn,mn) args -> 
         match args with
         | Some args -> Method(tn, mn, args)
         | None -> PropertyGet(tn,mn)
         )
-let pcall = pidentifier_ws .>>. pparamtuple |>> (fun (name,args) -> Call(name, args))
+let pcall = pidentifier_ws .>>. pargs |>> (fun (name,args) -> Call(name, args))
 
 pinvokeimpl := attempt pcall <|> attempt pmemberinvoke 
 
@@ -75,6 +79,12 @@ let paction = pinvoke |>> (fun x -> Action(x))
 let pset = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Set(id, e))
 let passign = pipe3 pidentifier_ws (str_ws "=") pexpr (fun id _ e -> Assign(Set(id, e)))
 let ppropertyset = pipe3 pmember (str_ws "=") pexpr (fun (tn,pn) _ e -> PropertySet(tn,pn,e))
+
+let ptuple =  
+    between (str_ws "(") (str_ws ")") (sepBy pidentifier_ws (str_ws ","))
+    |>> (fun xs -> Tuple([for x in xs -> Bind(x)]))
+
+let pdeconstruct = pipe3 ptuple (str_ws "=") pexpr (fun p _ e -> Deconstruct(p,e))
 
 let pindex = str_ws "[" >>. pexpr .>> str_ws "]"
 let pindices = many1 pindex
@@ -133,7 +143,7 @@ let pinstruct =
         pselect; pcase; pendselect
         psub; pendsub
         pfunction; pendfunction
-        ppropertyset; passign; psetat
+        ppropertyset; passign; psetat; pdeconstruct
         paction
         plabel; pgoto
     ]
