@@ -355,7 +355,22 @@ let emitInstructions
                     il.MarkLabel(below)
                 | Pattern(Tuple(patterns)) ->
                     let failLabel = il.DefineLabel()
-                    // TODO: Check x.IsArray & x.Length = patterns.Length
+                    // Check IsArray
+                    il.Emit(OpCodes.Dup)
+                    let mi = typeof<Microsoft.SmallBasic.Library.Array>.GetMethod("IsArray")
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitConvertToBool il
+                    il.Emit(OpCodes.Brfalse,failLabel)
+                    // Check Item Count
+                    il.Emit(OpCodes.Dup)
+                    let mi = typeof<Microsoft.SmallBasic.Library.Array>.GetMethod("GetItemCount")
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitLiteral il (Int(patterns.Length))
+                    let mi = typeof<Primitive>.GetMethod(toOp Eq)
+                    il.EmitCall(OpCodes.Call, mi, null)
+                    emitConvertToBool il
+                    il.Emit(OpCodes.Brfalse,failLabel)
+                    // Check Items
                     patterns |> List.iteri (fun i pattern ->
                         match pattern with
                         | Bind("_") -> ()
