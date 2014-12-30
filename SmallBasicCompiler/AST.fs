@@ -72,4 +72,6 @@ type instruction =
     | Select of expr
     | Case of clause list
     | EndSelect
+/// Source position info
+type position = {StartLn:int;StartCol:int;EndLn:int;EndCol:int}
 // [/snippet]

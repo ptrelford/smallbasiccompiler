@@ -23,6 +23,9 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>bin\Debug\SmallBasicCompiler.XML</DocumentationFile>
     <Prefer32Bit>true</Prefer32Bit>
+    <StartArguments>..\..\FizzBuzz.sb</StartArguments>
+    <StartAction>Program</StartAction>
+    <StartProgram>C:\Users\ptrelford\Documents\Visual Studio 2013\Projects\smallbasiccompiler\SmallBasicCompiler\bin\Debug\FizzBuzz.exe</StartProgram>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -49,7 +52,7 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="SmallBasicLibrary">
-      <HintPath>C:\Users\Phil\Documents\Visual Studio 2012\Projects\SmallBasicCompiler\SmallBasicCompiler\SmallBasicLibrary.dll</HintPath>
+      <HintPath>SmallBasicLibrary.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -62,6 +65,8 @@
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="FizzBuzz.sb" />
+    <None Include="Game.sb" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

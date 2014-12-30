@@ -161,17 +161,21 @@ let pinstruct =
     |> List.map attempt
     |> choice
 
-type Line = Blank | Instruction of instruction
+let toPosition (p1:Position) (p2:Position) = 
+    {StartLn=int p1.Line;StartCol=int p1.Column;EndLn=int p2.Line;EndCol=int p2.Column}
+type Line = Blank | Instruction of position * instruction
 let pcomment = pchar '\'' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
 let peol = pcomment <|> (pchar '\n')
-let pinstruction = ws >>. pinstruct .>> peol |>> (fun i -> Instruction i)
+let pinstructpos = 
+    pipe3 getPosition pinstruct getPosition (fun p1 i p2 -> toPosition p1 p2 , i)
+let pinstruction = ws >>. pinstructpos .>> peol |>> (fun (pos,i) -> Instruction(pos,i))
 let pblank = ws >>. peol |>> (fun _ -> Blank)
 let plines = many (attempt pinstruction <|> attempt pblank) .>> eof
 let parse (program:string) =    
     match run plines program with
     | Success(result, _, _)   -> 
         result 
-        |> List.choose (function Instruction i -> Some i | Blank -> None) 
+        |> List.choose (function Instruction(pos,i) -> Some(pos,i) | Blank -> None) 
         |> List.toArray
     | Failure(errorMsg, e, s) -> failwith errorMsg
 // [/snippet]

@@ -52,9 +52,10 @@ let generateMethods (typeBuilder:TypeBuilder) (instructions:instruction[]) =
 /// Emits IL for the specified instructions
 let emitInstructions 
         (mainIL:ILGenerator)
+        doc
         (methods:IDictionary<identifier,MethodBuilder * string list>) 
         (fields:IDictionary<identifier,FieldBuilder>)
-        (instructions:instruction[]) =
+        (program:(position * instruction)[]) =
     let fieldLookup name = fields.[name]
     /// IL generator for current method
     let methodIL = ref mainIL
@@ -142,17 +143,18 @@ let emitInstructions
         | Comparison(lhs,op,rhs) -> op |> toOp |> emitOp il lhs rhs 
         | Logical(lhs,And,rhs) -> emitOp il lhs rhs "op_And"
         | Logical(lhs,Or,rhs) -> emitOp il lhs rhs "op_Or"
-        | NewTuple(xs) ->
-            let array = il.DeclareLocal(typeof<Primitive>)
-            xs |> List.iteri (fun i x ->
-                emitExpression il x
-                il.Emit(OpCodes.Ldloc, array.LocalIndex)
-                emitExpression il (Literal(Int(i)))
-                let mi = typeof<Primitive>.GetMethod("SetArrayValue")
-                il.EmitCall(OpCodes.Call, mi, null)
-                il.Emit(OpCodes.Stloc, array.LocalIndex)
-            )
+        | NewTuple(xs) -> newTuple il xs
+    and newTuple il xs =
+        let array = il.DeclareLocal(typeof<Primitive>)
+        xs |> List.iteri (fun i x ->
+            emitExpression il x
             il.Emit(OpCodes.Ldloc, array.LocalIndex)
+            emitExpression il (Literal(Int(i)))
+            let mi = typeof<Primitive>.GetMethod("SetArrayValue")
+            il.EmitCall(OpCodes.Call, mi, null)
+            il.Emit(OpCodes.Stloc, array.LocalIndex)
+        )
+        il.Emit(OpCodes.Ldloc, array.LocalIndex)
     and toOp = function
         | Eq -> "op_Equality" | Ne -> "op_Inequality"
         | Lt -> "op_LessThan" | Gt -> "op_GreaterThan"
@@ -402,11 +404,14 @@ let emitInstructions
             | None -> ()
             il.Emit(OpCodes.Pop)
     // Iterate over instructions
-    for instruction in instructions do 
-        emitInstruction !methodIL instruction 
+    for (pos, instruction) in program do
+        let il = !methodIL
+        il.MarkSequencePoint(doc,pos.StartLn,pos.StartCol,pos.EndLn,pos.EndCol)
+        emitInstruction il instruction 
 
 /// Compiles program instructions to a .Net assembly
-let compileTo name (program:instruction[]) =
+let compileTo name program =
+    let _, instructions = program |> Array.unzip
     /// Builder for assembly
     let assemblyBuilder =
         AppDomain.CurrentDomain.DefineDynamicAssembly(
@@ -414,14 +419,16 @@ let compileTo name (program:instruction[]) =
             AssemblyBuilderAccess.RunAndSave)
     /// Builder for module
     let moduleBuilder = 
-        assemblyBuilder.DefineDynamicModule(name+".exe")
+        assemblyBuilder.DefineDynamicModule(name+".exe", true)
+    /// Writer for source links
+    let doc = moduleBuilder.DefineDocument(name+".sb", Guid.Empty, Guid.Empty, Guid.Empty)
     /// Builder for type
     let typeBuilder =
         moduleBuilder.DefineType("Program", TypeAttributes.Public)
     /// Fields representing program's variables
-    let fields = generateFields typeBuilder program
+    let fields = generateFields typeBuilder instructions
     /// Methods representing program's subroutine
-    let methods = generateMethods typeBuilder program
+    let methods = generateMethods typeBuilder instructions
     /// Main method representing main routine
     let mainBuilder =
         typeBuilder.DefineMethod(
@@ -434,7 +441,7 @@ let compileTo name (program:instruction[]) =
     // IL generator for main method
     let il = mainBuilder.GetILGenerator()
     // Emit program instructions
-    emitInstructions il methods fields program
+    emitInstructions il doc methods fields program
     il.Emit(OpCodes.Ret)
     // Set main method as entry point
     assemblyBuilder.SetEntryPoint(mainBuilder)

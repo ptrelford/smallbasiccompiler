@@ -1,32 +1,22 @@
-﻿let source = """
-' Returns Modulus
-Function Mod(Dividend,Divisor)
-  Mod = Dividend
-  While Mod >= Divisor
-    Mod = Mod - Divisor
-  EndWhile
-EndFunction
-
-Sub Echo(s)
-  TextWindow.WriteLine(s)
-EndSub
-
-For A = 1 To 100 ' Iterate from 1 to 100
-  Select Case (Mod(A,3),Mod(A,5))
-    Case (0,0)
-      Echo("FizzBuzz")
-    Case (0,_)
-      Echo("Fizz")
-    Case (_,0)
-      Echo("Buzz")
-    Case Else
-      Echo(A)
-  EndSelect
-EndFor
-"""
+﻿open System
+open System.IO
 
 [<EntryPoint>]
 let main argv = 
-    let program = Parser.parse source
-    Compiler.compileTo "MyProgram" program
-    0 // return an integer exit code
+    if argv.Length = 0 then 
+        printfn "Extended Small Basic Compiler"
+        printfn ""
+        printfn "Please specify a source file to compile"
+        exit 0
+    let path = argv.[0]
+    if not (File.Exists(path)) then
+        printfn "File does not exist"
+        exit 0
+    try
+        let source = File.ReadAllText(path)
+        let program = Parser.parse source
+        let exe = Path.GetFileNameWithoutExtension(path)
+        Compiler.compileTo exe program
+    with e ->
+        printfn "%s" e.Message
+    0

@@ -1,0 +1,183 @@
+﻿' Turtle Dodger 0.6b
+' Copyright (c) 2014 Nonki Takahashi. The MIT License.
+'
+' History:
+' 0.6b 2014-07-30 Changed image and sorted subroutines. (QZN342-4)
+' 0.5b 2014-04-17 Changed to detect collision. (QZN342-3)
+' 0.4a 2014-04-17 Added opening. (QZN342-2)
+' 0.3a 2014-04-02 Avoided to hold while Turtle moving. (QZN342-1)
+' 0.2a 2014-04-02 Changed for Silverlight. (QZN342-0)
+' 0.1a 2014-04-02 Created. (QZN342)
+'
+title = "Turtle Dodger 0.6b"
+GraphicsWindow.Title = title
+debug = "False"
+Init()
+Opening()
+Game()
+Closing()
+Sub AddObject
+  iMax = obj["iMax"] + 1
+  obj["iMax"] = iMax
+  GraphicsWindow.PenWidth = 1
+  type = Math.GetRandomNumber(3)
+  obj[iMax]["type"] = type
+  GraphicsWindow.BrushColor = color[type]
+  sz = size[type]
+  obj[iMax]["obj"] = Shapes.AddRectangle(sz, sz)
+  x = Math.GetRandomNumber(gw - 20) + 10
+  y = -20
+  obj[iMax]["x"] = x
+  obj[iMax]["y"] = y
+  Shapes.Move(obj[iMax]["obj"], x, y)
+  Shapes.Rotate(obj[iMax]["obj"], Math.GetRandomNumber(360))
+EndSub
+Sub Closing
+  Timer.Pause()
+  Turtle.Turn(720)
+  GraphicsWindow.BrushColor = "White"
+  GraphicsWindow.FontName = "Trebuchet MS"
+  GraphicsWindow.FontSize = 40
+  x = (gw - 217) / 2
+  y = 100
+  GraphicsWindow.DrawText(x, y, "GAME OVER")
+  Program.Delay(3000)
+EndSub
+Sub Game
+  Turtle.Speed = 7
+  Turtle.PenUp()
+  x = gw / 2
+  y = gh - 40
+  GraphicsWindow.BrushColor = "White"
+  GraphicsWindow.FontSize = 18
+  score = Shapes.AddText("0")
+  Shapes.Move(score, 20, 20)
+  If debug Then
+    GraphicsWindow.BrushColor = "White"
+    GraphicsWindow.FontSize = 12
+    pos = Shapes.AddText("(" + x + "," + y + ")")
+    GraphicsWindow.PenWidth = 1
+    cross1 = Shapes.AddLine(0, -8, 0, 8)
+    cross2 = Shapes.AddLine(-8, 0, 8, 0)
+    Shapes.Move(cross1, x, y)
+    Shapes.Move(cross2, x, y)
+    Shapes.Move(pos, gw - 100, 20)
+  EndIf
+  Turtle.MoveTo(x, y)
+  Turtle.Angle = 0
+  Not = "False=True;True=False;"
+  moving = "False"
+  scrolling = "False"
+  Ready()
+  GraphicsWindow.KeyDown = OnKeyDown
+  tick = "False"
+  Timer.Interval = 1000 / 24
+  Timer.Tick = OnTick
+  lastems = Clock.ElapsedMilliseconds
+  obj["iMin"] = 1
+  While Not[cd]
+    If moving Then
+      If key = "Left" Then
+        Turtle.TurnLeft()
+        Turtle.Move(30)
+        Turtle.TurnRight()
+      ElseIf key = "Right" Then
+        Turtle.TurnRight()
+        Turtle.Move(30)
+        Turtle.TurnLeft()
+      EndIf
+      moving = "False"
+    Else
+      Program.Delay(100)
+    EndIf
+  EndWhile
+EndSub
+Sub Init
+  gw = 598
+  gh = 428
+  GraphicsWindow.BackgroundColor = "DodgerBlue"
+  GraphicsWindow.Width = gw
+  GraphicsWindow.Height = gh
+  color = "1=Orange;2=Cyan;3=Lime;"
+  size = "1=20;2=16;3=12;"
+  passed = 0
+  cd = "False"  ' collision detected
+EndSub
+Sub OnKeyDown
+  If Not[moving] Then
+    moving = "True"
+    key = GraphicsWindow.LastKey
+  EndIf
+EndSub
+Sub OnTick
+  If Not[scrolling] Then
+    scrolling = "True"
+    ems = Clock.ElapsedMilliseconds
+    If ems - lastems > 500 Then
+      AddObject()
+      lastems = ems
+    EndIf
+    ScrollObject()
+    scrolling = "False"
+  EndIf
+  If debug Then
+    x = Math.Floor(Turtle.X)
+    y = Math.Floor(Turtle.Y)
+    Shapes.SetText(pos, "(" + x + "," + y + ")")
+    Shapes.Move(cross1, x, y)
+    Shapes.Move(cross2, x, y)
+  EndIf
+EndSub
+Sub Opening
+  url = "http://gallery.technet.microsoft.com/Turtle-PNG-Bitmap-for-582b449c/file/116666/1/Turtle.png"
+  bigTurtle = Shapes.AddImage(url)
+  Shapes.Move(bigTurtle, 180, 140)
+  GraphicsWindow.BrushColor = "White"
+  GraphicsWindow.FontName = "Trebuchet MS"
+  GraphicsWindow.FontSize = 50
+  x = (gw - 443) / 2
+  y = 40
+  GraphicsWindow.DrawText(x, y, title)
+  Program.Delay(3000)
+  GraphicsWindow.Clear()
+EndSub
+Sub Ready
+  GraphicsWindow.FontSize = 40
+  rdy = Shapes.AddText("Ready?")
+  x = (gw - 130) / 2
+  y = 100
+  Shapes.Move(rdy, x, y)
+  For opacity = 100 To 0 Step -10
+    Shapes.SetOpacity(rdy, opacity)
+    Program.Delay(200)
+  EndFor
+  Shapes.Remove(rdy)
+EndSub
+Sub ScrollObject
+  iMin = obj["iMin"]
+  iMax = obj["iMax"]
+  For i = iMin To iMax
+    x = obj[i]["x"]
+    y = obj[i]["y"] + 5
+    tx = Math.Floor(Turtle.X)
+    ty = Math.Floor(Turtle.Y)
+    d = Math.SquareRoot(Math.Power(tx - x, 2) + Math.Power(ty - y, 2))
+    If d < (size[obj[i]["type"]] + 16) / 2 Then
+      cd = "True"      ' collision detected
+      Goto break
+    EndIf
+    If y > gh Then
+      passed = passed + 1
+      Shapes.SetText(score, passed)
+      Shapes.Remove(obj[i]["obj"])
+      obj[i] = ""
+      obj["iMin"] = i + 1
+    Else
+      Shapes.Move(obj[i]["obj"], x, y)
+      obj[i]["x"] = x
+      obj[i]["y"] = y
+    EndIf
+  EndFor
+  break:
+EndSub
+

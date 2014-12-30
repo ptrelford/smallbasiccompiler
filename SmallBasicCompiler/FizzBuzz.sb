@@ -1,0 +1,24 @@
+﻿' Returns Modulus
+Function Mod(Dividend,Divisor)
+  Mod = Dividend
+  While Mod >= Divisor
+    Mod = Mod - Divisor
+  EndWhile
+EndFunction
+
+Sub Echo(s)
+  TextWindow.WriteLine(s)
+EndSub
+
+For A = 1 To 100 ' Iterate from 1 to 100
+  Select Case (Mod(A,3),Mod(A,5))
+    Case (0,0)
+      Echo("FizzBuzz")
+    Case (0,_)
+      Echo("Fizz")
+    Case (_,0)
+      Echo("Buzz")
+    Case Else
+      Echo(A)
+  EndSelect
+EndFor
